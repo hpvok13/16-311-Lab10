@@ -13,6 +13,7 @@ from odometry import *
 BP = brickpi3.BrickPi3()
 
 GOAL_SECTOR = 5
+HARD = False
 
 GOAL_SECTOR += (
     0.5
@@ -113,7 +114,8 @@ if __name__ == "__main__":
                 prediction = np.round(cl.location_degrees(), 1) / (360 / 16)
                 # Stop if at destination and after 30 seconds
                 total_time_elapsed = time.perf_counter() - total_start_time
-                if total_time_elapsed > 50.0:
+                stop_after_time = 50.0 if not HARD else 60.0
+                if total_time_elapsed > stop_after_time:
                     if abs(prediction - GOAL_SECTOR) < 0.1:
                         set_motor_powers([0, 0])
                         BP.reset_all()
