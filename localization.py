@@ -17,9 +17,16 @@ SECTOR_TICKS = TICKS / NUM_SECTORS
 EPS = 1e-6
 
 
+def circular_distance(x, y, ticks):
+    forward = np.absolute(x - y)
+    backward = np.absolute(x - (y - ticks))
+    return np.minimum(forward, backward)
+
+
 class CircleLocalizer:
-    MOVE_VARIANCE_MULTIPLIER = 0.5
-    UPDATE_VARIANCE_MULTIPLIER = 2.0
+    MOVE_VARIANCE_MULTIPLIER = 0.1
+    BLOCK_VARIANCE_MULTIPLIER = 1.0
+    NO_BLOCK_VARIANCE_MULTIPLIER = 1.0  # blocks are small, so we will have no block more often. Thus we want a higher variance for this.
 
     def __init__(self) -> None:
         # Initially uniform location probabilities
@@ -36,7 +43,7 @@ class CircleLocalizer:
 
     # computes a gaussian pdf, wrapping around a circle
     def circular_gaussian_pdf(self, mu, sigma, x):
-        distance = np.minimum(abs(mu - x), abs(mu - (x - TICKS)))
+        distance = circular_distance(mu, x, TICKS)
         return (1.0 / (sigma * np.sqrt(2.0 * np.pi))) * np.exp(
             -(1.0 / 2.0) * ((distance / sigma) ** 2)
         )
@@ -68,12 +75,18 @@ class CircleLocalizer:
         if not block:
             locations = 1 - locations
 
-        variance = SECTOR_TICKS * self.UPDATE_VARIANCE_MULTIPLIER
-        
+        mult = (
+            self.BLOCK_VARIANCE_MULTIPLIER
+            if block
+            else self.NO_BLOCK_VARIANCE_MULTIPLIER
+        )
+        variance = SECTOR_TICKS * mult
+
         location_kernel = np.fromfunction(
             lambda x: self.circular_gaussian_pdf(0, variance, x), (TICKS,)
         )
         distribution = self.conv_circ(locations, location_kernel)
+        distribution = distribution / np.linalg.norm(distribution, ord=1)
         return distribution
 
     def update(self, block: bool):
@@ -108,17 +121,28 @@ def print_sectors(sums, num_per_sector):
 
 if __name__ == "__main__":
     cl = CircleLocalizer()
-    cl.probabilities = np.full(360, 0)
-    cl.probabilities[0] = 1
-    print(np.round(cl.probabilities, 3))
-    # for _ in range(10):
-    #     cl.move(1)
-    # cl.move(180)
-    cl.move(180)
-    cl.move(180)
-    # for _ in range(360*5):
-    #     cl.move(1.0/5.0)
-    # cl.move(1)
-    # print(cl.probabilities)
-    print(np.round(cl.probabilities, 3))
-    print(np.argmax(cl.probabilities))
+
+    # Simulate perfect movement
+    move = 1
+    deg = 0
+    for i in range(100000):
+        if i == 360 * 2:
+            BLOCK_LOCATIONS = np.roll(BLOCK_LOCATIONS, 5)
+            deg += (360 / NUM_SECTORS) * 5
+        if i == 360 * 5:
+            break
+        deg = (deg + move) % 360
+        cl.move(move)
+        block = BLOCK_LOCATIONS[int(deg / (360 / NUM_SECTORS))] == 1
+        cl.update(block)
+        dist = np.round(circular_distance(cl.location_degrees(), deg, 360), 1)
+        if dist > 10:
+            print("i", i)
+            print(dist, " | ", np.round(np.abs(cl.sectors()), 1))
+            print("---")
+        if i % 100 == 0:
+            print("i", i)
+            print(dist, " | ", np.round(np.abs(cl.sectors()), 1))
+            print("---")
+
+    print_sectors(np.round(cl.sectors5(), 3), 5)
