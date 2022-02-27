@@ -1,0 +1,2 @@
+WHEEL_RADIUS = 1.58757  # inches
+WHEEL_BASE_WIDTH = 4.58  # inches
