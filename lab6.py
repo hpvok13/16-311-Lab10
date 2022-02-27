@@ -108,6 +108,7 @@ if __name__ == "__main__":
 
                 print(
                     """block: %s
+total_time_elapsed: %s
 ultrasonic: %s
 angle_diff: %s
 degrees: %s
@@ -115,6 +116,7 @@ prediction: %s
 ----"""
                     % (
                         block,
+                        total_time_elapsed,
                         ultrasonic,
                         angle_diff,
                         total_degrees_traveled % 360,
