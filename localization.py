@@ -77,11 +77,13 @@ class CircleLocalizer:
         self.probabilities = normalized
 
     def block_distribution(self, block: bool):
+        sector_size = TICKS / NUM_SECTORS
         locations = np.full(TICKS, 0)
         for tick in range(TICKS):
-            sector_size = TICKS / NUM_SECTORS
-            sector = int(np.floor(tick / sector_size))
-            locations[tick] = BLOCK_LOCATIONS[sector]
+            block_sector = int(
+                np.floor(((tick + (sector_size / 2)) % TICKS) / sector_size)
+            )
+            locations[tick] = BLOCK_LOCATIONS[block_sector]
         if not block:
             locations = 1 - locations
 
