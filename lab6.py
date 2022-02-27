@@ -12,11 +12,13 @@ from odometry import *
 
 BP = brickpi3.BrickPi3()
 
-GOAL_SECTOR = 1
+GOAL_SECTOR = 5
 
 GOAL_SECTOR += (
-    0.5 + 0.5
-)  # 0.5 for the center of the sector, 0.5 for the block step function offset
+    0.5
+)  # 0.5 for the center of the sector
+
+GOAL_SECTOR -= 0.3 # just an empiricle bias
 
 LEFT_MOTOR_PORT = BP.PORT_C
 RIGHT_MOTOR_PORT = BP.PORT_B
@@ -70,11 +72,17 @@ if __name__ == "__main__":
             powers = BASE_MOTOR_POWERS
             light_diff = light - LIGHT_THRESHOLD
             power_add = None
+            p_term = None
             if light_diff < 0:
-                power_add = np.array((1.0, -0.1))
+                # white
+                power_add = np.array((1.0, 0))
+                p_term = abs(light_diff) * LINE_P_MULTIPLIER * power_add
+                p_term = np.minimum(p_term, np.array((4, 0)))
             else:
-                power_add = np.array((-0.5, 1.0))
-            powers = powers + abs(light_diff) * LINE_P_MULTIPLIER * power_add
+                # black
+                power_add = np.array((-1.0, 1.0))
+                p_term = abs(light_diff) * LINE_P_MULTIPLIER * power_add
+            powers = powers + p_term
             set_motor_powers(powers)
 
             # Localization
