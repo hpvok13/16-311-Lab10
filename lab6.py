@@ -12,7 +12,11 @@ from odometry import *
 
 BP = brickpi3.BrickPi3()
 
-GOAL_SECTOR = 8.5
+GOAL_SECTOR = 1
+
+GOAL_SECTOR += (
+    0.5 + 0.5
+)  # 0.5 for the center of the sector, 0.5 for the block step function offset
 
 LEFT_MOTOR_PORT = BP.PORT_C
 RIGHT_MOTOR_PORT = BP.PORT_B
@@ -20,7 +24,7 @@ LIGHT_SENSOR_PORT = BP.PORT_2
 ULTRASONIC_SENSOR_PORT = BP.PORT_1
 LOOP_DURATION = 0.01
 
-LIGHT_THRESHOLD = 2450  # above this is black
+LIGHT_THRESHOLD = 2500  # above this is black
 BLOCK_THRESHOLD = 35  # below this means there is a block
 
 CIRCLE_DIAMETER = 25
@@ -28,9 +32,9 @@ CIRCLE_CIRCUMFERENCE = np.pi * CIRCLE_DIAMETER
 LEFT_POWER = 35
 RIGHT_POWER = 20
 
-# Follow on the outside of the black line
-BLACK_POWERS = (15, 30)
-WHITE_POWERS = (30, 15)
+# Use P control to follow the outer edge of the black line
+BASE_MOTOR_POWERS = np.array((20.0, 15.0))
+LINE_P_MULTIPLIER = 0.05
 
 
 def set_motor_powers(powers):
@@ -63,12 +67,14 @@ if __name__ == "__main__":
             ultrasonic = BP.get_sensor(ULTRASONIC_SENSOR_PORT)
 
             # Follow line
-            black = light > LIGHT_THRESHOLD
-            powers = None
-            if black:
-                powers = BLACK_POWERS
+            powers = BASE_MOTOR_POWERS
+            light_diff = light - LIGHT_THRESHOLD
+            power_add = None
+            if light_diff < 0:
+                power_add = np.array((1.0, -0.1))
             else:
-                powers = WHITE_POWERS
+                power_add = np.array((-0.5, 1.0))
+            powers = powers + abs(light_diff) * LINE_P_MULTIPLIER * power_add
             set_motor_powers(powers)
 
             # Localization
@@ -110,6 +116,9 @@ if __name__ == "__main__":
                     """block: %s
 total_time_elapsed: %s
 ultrasonic: %s
+light: %s
+light_diff: %s
+powers: %s
 angle_diff: %s
 degrees: %s
 prediction: %s
@@ -118,6 +127,9 @@ prediction: %s
                         block,
                         total_time_elapsed,
                         ultrasonic,
+                        light,
+                        light_diff,
+                        powers,
                         angle_diff,
                         total_degrees_traveled % 360,
                         prediction,
