@@ -120,7 +120,29 @@ def print_sectors(sums, num_per_sector):
 
 
 if __name__ == "__main__":
+    ## Simulation
+    import matplotlib.pyplot as plt
+
+    def block_exists_sim(deg):
+        block = False
+        loc = deg / (360 / NUM_SECTORS)
+        loc_frac = loc - int(loc)
+        if abs(loc_frac - 0.5) < 0.3:
+            block = BLOCK_LOCATIONS[int(deg / (360 / NUM_SECTORS))] == 1
+        if abs(loc_frac - 0.5) < 0.1:
+            block = False
+        return block
+
+    def block_exists_sim_wide(deg):
+        return BLOCK_LOCATIONS[int(deg / (360 / NUM_SECTORS))] == 1
+
     cl = CircleLocalizer()
+
+    y = [block_exists_sim(deg) for deg in range(0, 360)]
+    y2 = [block_exists_sim_wide(deg) for deg in range(0, 360)]
+    plt.plot(y)
+    plt.plot(y2)
+    plt.show()
 
     # Simulate perfect movement
     move = 1
@@ -131,10 +153,12 @@ if __name__ == "__main__":
             deg += (360 / NUM_SECTORS) * 5
         if i == 360 * 5:
             break
+
         deg = (deg + move) % 360
+
         cl.move(move)
-        block = BLOCK_LOCATIONS[int(deg / (360 / NUM_SECTORS))] == 1
-        cl.update(block)
+        cl.update(block_exists_sim(deg))
+
         dist = np.round(circular_distance(cl.location_degrees(), deg, 360), 1)
         if dist > 10:
             print("i", i)
