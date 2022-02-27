@@ -28,13 +28,16 @@ class Movement:
         TARGET_POWER = 20.0
 
         if not raw:
-            angle = angle % 360
+            angle %= 360
             if angle > 180:
                 angle -= 360
             if angle < -180:
                 angle += 360
 
-        self.er.reset_encoders()
+        if abs(angle) < 1e-6:
+            return
+
+        self.er.reset()
 
         angle_rad = angle / 180.0 * np.pi
         arclength = angle_rad * (WHEEL_BASE_WIDTH / 2.0)
@@ -108,6 +111,7 @@ class Movement:
         ANGLE_D_MULTIPLIER = 0.5
         POWER_P_MULTIPLIER = 0.03
 
+        self.er.reset()
         state = transform(0, 0, 0)
 
         goal = np.array((distance, 0))

@@ -11,16 +11,16 @@ class EncoderReader:
         self.left_port = left_port
         self.right_port = right_port
 
-        self.reset_encoders()
-        self.curr = self.read_encoders()
+        self.reset()
 
-    def reset_encoders(self):
+    def reset(self):
         self.bp.offset_motor_encoder(
             self.left_port, self.bp.get_motor_encoder(self.left_port)
         )
         self.bp.offset_motor_encoder(
             self.right_port, self.bp.get_motor_encoder(self.right_port)
         )
+        self.curr = self.read_encoders()
 
     def read_encoders(self):
         left = self.bp.get_motor_encoder(self.left_port)
