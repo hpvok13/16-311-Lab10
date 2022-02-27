@@ -18,15 +18,20 @@ EPS = 1e-6
 
 
 def circular_distance(x, y, ticks):
-    forward = np.absolute(x - y)
-    backward = np.absolute(x - (y - ticks))
+    # Swap if x > y
+    swap = np.greater(x, y)
+
+    x_ = swap*y + (1-swap)*x
+    y_ = swap*x + (1-swap)*y
+    forward = np.absolute(y_-x_)
+    backward = np.absolute((ticks - y_) + x_)
     return np.minimum(forward, backward)
 
 
 class CircleLocalizer:
     MOVE_VARIANCE_MULTIPLIER = 0.1
     BLOCK_VARIANCE_MULTIPLIER = 1.0
-    NO_BLOCK_VARIANCE_MULTIPLIER = 1.0  # blocks are small, so we will have no block more often. Thus we want a higher variance for this.
+    NO_BLOCK_VARIANCE_MULTIPLIER = 2.0  # blocks are small, so we will have no block more often. Thus we want a higher variance for this.
 
     def __init__(self) -> None:
         # Initially uniform location probabilities
@@ -144,10 +149,17 @@ if __name__ == "__main__":
     plt.plot(y2)
     plt.show()
 
+    plt.plot(np.array(range(0,3600))/10, cl.block_distribution(True))
+    plt.plot(np.array(range(0,3600))/10, cl.block_distribution(False))
+    plt.show()
+
+    plt.plot(cl.motion_kernel(100))
+    plt.show()
+
     # Simulate perfect movement
-    move = 1
     deg = 0
     for i in range(100000):
+        move = np.random.rand()*2 + 1
         if i == 360 * 2:
             BLOCK_LOCATIONS = np.roll(BLOCK_LOCATIONS, 5)
             deg += (360 / NUM_SECTORS) * 5
@@ -160,13 +172,11 @@ if __name__ == "__main__":
         cl.update(block_exists_sim(deg))
 
         dist = np.round(circular_distance(cl.location_degrees(), deg, 360), 1)
-        if dist > 10:
+        if dist > 10 or i % 100 == 0:
             print("i", i)
             print(dist, " | ", np.round(np.abs(cl.sectors()), 1))
-            print("---")
-        if i % 100 == 0:
-            print("i", i)
-            print(dist, " | ", np.round(np.abs(cl.sectors()), 1))
+            print(deg)
+            print(cl.location_degrees())
             print("---")
 
     print_sectors(np.round(cl.sectors5(), 3), 5)
