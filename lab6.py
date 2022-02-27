@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import time
 import traceback
 import numpy as np
@@ -11,14 +12,16 @@ from odometry import *
 
 BP = brickpi3.BrickPi3()
 
+GOAL_SECTOR = 8.5
+
 LEFT_MOTOR_PORT = BP.PORT_C
 RIGHT_MOTOR_PORT = BP.PORT_B
 LIGHT_SENSOR_PORT = BP.PORT_2
 ULTRASONIC_SENSOR_PORT = BP.PORT_1
 LOOP_DURATION = 0.01
 
-LIGHT_THRESHOLD = 2450 # above this is black
-BLOCK_THRESHOLD = 35 # below this means there is a block
+LIGHT_THRESHOLD = 2450  # above this is black
+BLOCK_THRESHOLD = 35  # below this means there is a block
 
 CIRCLE_DIAMETER = 25
 CIRCLE_CIRCUMFERENCE = np.pi * CIRCLE_DIAMETER
@@ -29,15 +32,10 @@ RIGHT_POWER = 20
 BLACK_POWERS = (15, 30)
 WHITE_POWERS = (30, 15)
 
-GOAL_SECTOR = 5
 
 def set_motor_powers(powers):
     BP.set_motor_power(LEFT_MOTOR_PORT, powers[0])
     BP.set_motor_power(RIGHT_MOTOR_PORT, powers[1])
-
-# motor_powers = np.array((25.0, 15.0))
-
-# LINE_P_MULTIPLIER = 0.01
 
 
 if __name__ == "__main__":
@@ -52,9 +50,10 @@ if __name__ == "__main__":
         cl = CircleLocalizer()
 
         # Main loop
+        total_start_time = time.perf_counter()
         iteration = 0
         total_degrees_traveled = 0
-        prev_state = transform(0, 0, 0)
+        prev_angle = 0
         state = transform(0, 0, 0)
         while True:
             start_time = time.perf_counter()
@@ -74,34 +73,54 @@ if __name__ == "__main__":
 
             # Localization
             iteration += 1
-            if iteration % 10 == 0:
+            if iteration % 1 == 0:
                 # Update state
                 encoders_diff = er.read_encoders_diff()
                 state = update_state(state, encoders_diff)
-                distance_traveled_inches = np.linalg.norm(state_to_pos(state) - state_to_pos(prev_state))
-                distance_traveled_frac = distance_traveled_inches / CIRCLE_CIRCUMFERENCE
-                distance_traveled_degrees = distance_traveled_frac * 360
-                total_degrees_traveled = (total_degrees_traveled + distance_traveled_degrees) % 360
-                prev_state = state
+
+                # Compute angle difference
+                angle = state_to_angle_deg(state)
+                # going clockwise, angle difference should be negative
+                angle_diff = (angle - prev_angle) % 360
+                if angle_diff > 180:
+                    angle_diff -= 360
+                if angle_diff > 0:
+                    continue
+                angle_diff = abs(angle_diff)
+                prev_angle = angle
+
+                total_degrees_traveled += angle_diff
 
                 # Localize
                 block = ultrasonic < BLOCK_THRESHOLD
-                cl.move(distance_traveled_degrees)
+                cl.move(angle_diff)
                 cl.update(block)
 
-                # Stop if confident at destination
-                max_location = np.argmax(cl.probabilities)
-                max_location_p = cl.probabilities[max_location]
-                prediction = max_location / (360/16)
-                if abs(prediction - (GOAL_SECTOR + 0.5)) < 0.1 and max_location_p > 0.2:
-                    set_motor_powers([0, 0])
-                    break
+                prediction = np.round(cl.location_degrees(), 1) / (360 / 16)
+                # Stop if at destination and after 30 seconds
+                total_time_elapsed = time.perf_counter() - total_start_time
+                if total_time_elapsed > 50.0:
+                    if abs(prediction - GOAL_SECTOR) < 0.1:
+                        set_motor_powers([0, 0])
+                        BP.reset_all()
+                        print("done littly fucker")
+                        sys.exit(0)
 
-                print(np.round(cl.probabilities, 3))
-                # print(ultrasonic)
-                print('degrees:', total_degrees_traveled)
-                print('prediction:', prediction)
-
+                print(
+                    """block: %s
+ultrasonic: %s
+angle_diff: %s
+degrees: %s
+prediction: %s
+----"""
+                    % (
+                        block,
+                        ultrasonic,
+                        angle_diff,
+                        total_degrees_traveled % 360,
+                        prediction,
+                    )
+                )
 
             duration = time.perf_counter() - start_time
             time.sleep(max(0, LOOP_DURATION - duration))
