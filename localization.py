@@ -21,11 +21,12 @@ def circular_distance(x, y, ticks):
     # Swap if x > y
     swap = np.greater(x, y)
 
-    x_ = swap*y + (1-swap)*x
-    y_ = swap*x + (1-swap)*y
-    forward = np.absolute(y_-x_)
+    x_ = swap * y + (1 - swap) * x
+    y_ = swap * x + (1 - swap) * y
+    forward = np.absolute(y_ - x_)
     backward = np.absolute((ticks - y_) + x_)
-    return np.minimum(forward, backward)
+    result = np.minimum(forward, backward)
+    return result
 
 
 class CircleLocalizer:
@@ -49,9 +50,10 @@ class CircleLocalizer:
     # computes a gaussian pdf, wrapping around a circle
     def circular_gaussian_pdf(self, mu, sigma, x):
         distance = circular_distance(mu, x, TICKS)
-        return (1.0 / (sigma * np.sqrt(2.0 * np.pi))) * np.exp(
+        result = (1.0 / (sigma * np.sqrt(2.0 * np.pi))) * np.exp(
             -(1.0 / 2.0) * ((distance / sigma) ** 2)
         )
+        return result
 
     # distance in degrees around the circle
     def motion_kernel(self, distance):
@@ -69,6 +71,9 @@ class CircleLocalizer:
         kernel = self.motion_kernel(distance)
         convolved = self.conv_circ(self.probabilities, kernel)
         normalized = convolved / np.linalg.norm(convolved, ord=1)
+        normalized = np.maximum(
+            normalized, 0
+        )  # floating point error in fft can yield tiny negative numbers
         self.probabilities = normalized
 
     def block_distribution(self, block: bool):
@@ -98,6 +103,9 @@ class CircleLocalizer:
         distribution = self.block_distribution(block)
         proportional = self.probabilities * distribution
         normalized = proportional / np.linalg.norm(proportional, ord=1)
+        normalized = np.maximum(
+            normalized, 0
+        )  # floating point error in fft can yield tiny negative numbers
         self.probabilities = normalized
 
     # Sum over the sectors
@@ -125,7 +133,6 @@ def print_sectors(sums, num_per_sector):
 
 
 if __name__ == "__main__":
-    ## Simulation
     import matplotlib.pyplot as plt
 
     def block_exists_sim(deg):
@@ -143,40 +150,58 @@ if __name__ == "__main__":
 
     cl = CircleLocalizer()
 
+    # Plot simulated block true/false sensor readings
     y = [block_exists_sim(deg) for deg in range(0, 360)]
     y2 = [block_exists_sim_wide(deg) for deg in range(0, 360)]
     plt.plot(y)
     plt.plot(y2)
+    plt.title("Simulated block sensor readings")
     plt.show()
 
-    plt.plot(np.array(range(0,3600))/10, cl.block_distribution(True))
-    plt.plot(np.array(range(0,3600))/10, cl.block_distribution(False))
+    # Plot distributions for weighting placed on robot location when a block is/is not observed
+    plt.plot(np.array(range(0, 3600)) / 10, cl.block_distribution(True))
+    plt.plot(np.array(range(0, 3600)) / 10, cl.block_distribution(False))
+    plt.title("Probability weights given the presence or absence of a block")
     plt.show()
 
-    plt.plot(cl.motion_kernel(100))
+    # Plot the motion kernel used in circular convolution for a 1 degree movement
+    # Note: motion_kernel takes ticks as input, so 10 ticks is one degree
+    plt.plot(cl.motion_kernel(10))
+    plt.title("Motion kernel for circular convolution")
     plt.show()
 
-    # Simulate perfect movement
+    ## Simulation
+    np.random.seed(123)
     deg = 0
-    for i in range(100000):
-        move = np.random.rand()*2 + 1
+    for i in range(3600):
+        # Simulate all of the blocks shifting on the hard course
         if i == 360 * 2:
-            BLOCK_LOCATIONS = np.roll(BLOCK_LOCATIONS, 5)
-            deg += (360 / NUM_SECTORS) * 5
-        if i == 360 * 5:
-            break
+            BLOCK_LOCATIONS = np.roll(BLOCK_LOCATIONS, 4)
+            deg += (360 / NUM_SECTORS) * 4
 
-        deg = (deg + move) % 360
+        # Simulated movement with noise and noisy odometry
+        move_real = np.random.rand() * 2 + 1
+        move_odometry = np.random.rand() * 2 + 1
+        deg = (deg + move_real) % 360
 
-        cl.move(move)
+        # Update the localizer
+        cl.move(move_odometry)
         cl.update(block_exists_sim(deg))
 
-        dist = np.round(circular_distance(cl.location_degrees(), deg, 360), 1)
-        if dist > 10 or i % 100 == 0:
+        # Compute error and print it + probabilities
+        error_deg = np.round(circular_distance(cl.location_degrees(), deg, 360), 1)
+        if error_deg > 10 or i % 100 == 0:
             print("i", i)
-            print(dist, " | ", np.round(np.abs(cl.sectors()), 1))
-            print(deg)
-            print(cl.location_degrees())
+            print(error_deg, " | ", np.round(np.abs(cl.sectors()), 1))
+            print(np.round(np.max(cl.sectors5()), 10))
+            print("deg", deg)
             print("---")
 
+        # Plot current probabilities
+        plt.clf()
+        plt.plot(np.array(range(0, 3600)) / 10 / 22.5, cl.probabilities)
+        plt.pause(0.05)
+
     print_sectors(np.round(cl.sectors5(), 3), 5)
+    print(np.round(cl.probabilities, 10).tolist())
+    print(np.round(np.max(cl.probabilities), 10))
