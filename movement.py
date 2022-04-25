@@ -10,17 +10,21 @@ class Movement:
     DEBUG = True
     LOOP_SLEEP_DURATION = 0.01
 
-    def __init__(self, bp, left_port, right_port):
+    def __init__(self, bp, left_port, right_port, er):
         self.bp = bp
         self.left_port = left_port
         self.right_port = right_port
-        self.er = EncoderReader(bp, left_port, right_port)
+        self.er = er
 
     def set_motor_powers(self, powers):
         self.bp.set_motor_power(self.left_port, powers[0])
         self.bp.set_motor_power(self.right_port, powers[1])
 
-    def turn(self, angle, raw=False):
+    def set_motor_dps(self, dps):
+        self.bp.set_motor_dps(self.left_port, dps[0])
+        self.bp.set_motor_dps(self.right_port, dps[1])
+
+    def turn(self, angle, state, raw=False):
         ANGLE_P_MULTIPLIER = 0.01
         ANGLE_D_MULTIPLIER = 0.15
         POWER_P_MULTIPLIER = 0.02
@@ -57,6 +61,10 @@ class Movement:
             start_time = time.perf_counter()
 
             angles = self.er.read_encoders()
+
+            # Update state
+            encoders_diff = self.er.read_encoders_diff()
+            state = update_state(state, encoders_diff)
 
             ts = angles / angle_offsets
             t = np.mean(ts)
@@ -101,6 +109,7 @@ class Movement:
                 print("------")
 
             self.set_motor_powers(curr_powers)
+
 
             duration = time.perf_counter() - start_time
             time.sleep(max(0, self.LOOP_SLEEP_DURATION - duration))
